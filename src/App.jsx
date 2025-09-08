@@ -5,8 +5,11 @@ import { Header } from './components/Header';
 import { ContactList } from './components/ContactList';
 import { ContactGroups } from './components/ContactGroups';
 import { StatsCards } from './components/StatsCards';
+import { MessagingModal } from './components/MessagingModal';
+import { AIInsightsPanel } from './components/AIInsightsPanel';
 import { usePaymentContext } from './hooks/usePaymentContext';
 import { generateMockContacts } from './utils/mockData';
+import { analyzeContactPriority } from './services/aiService';
 
 function App() {
   const { isConnected } = useAccount();
@@ -15,6 +18,8 @@ function App() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [hasPaidForPrioritization, setHasPaidForPrioritization] = useState(false);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [isMessagingModalOpen, setIsMessagingModalOpen] = useState(false);
 
   const { createSession } = usePaymentContext();
 
@@ -31,12 +36,28 @@ function App() {
       await createSession();
       setHasPaidForPrioritization(true);
       
-      // Simulate AI prioritization by sorting contacts by interaction score
-      const prioritizedContacts = [...contacts].sort((a, b) => b.priorityScore - a.priorityScore);
-      setContacts(prioritizedContacts);
+      // Use AI service for prioritization
+      const result = await analyzeContactPriority(contacts);
+      if (result.prioritizedContacts) {
+        const updatedContacts = contacts.map(contact => {
+          const prioritized = result.prioritizedContacts.find(p => p.contactId === contact.contactId);
+          return prioritized ? { ...contact, priorityScore: prioritized.priorityScore } : contact;
+        }).sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+        
+        setContacts(updatedContacts);
+      }
     } catch (error) {
       console.error('Payment failed:', error);
     }
+  };
+
+  const handleApplyAIPrioritization = (prioritizedContacts) => {
+    const updatedContacts = contacts.map(contact => {
+      const prioritized = prioritizedContacts.find(p => p.contactId === contact.contactId);
+      return prioritized ? { ...contact, priorityScore: prioritized.priorityScore } : contact;
+    }).sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
+    
+    setContacts(updatedContacts);
   };
 
   const handleCreateGroup = async (groupName, selectedContacts) => {
@@ -55,6 +76,34 @@ function App() {
     } catch (error) {
       console.error('Payment failed:', error);
     }
+  };
+
+  const handleCreateSuggestedGroup = async (groupName, selectedContacts, description) => {
+    try {
+      await createSession();
+      
+      const newGroup = {
+        groupId: Date.now(),
+        name: groupName,
+        description: description || `AI-suggested group with ${selectedContacts.length} contacts`,
+        createdAt: new Date(),
+        contacts: selectedContacts
+      };
+      
+      setGroups([...groups, newGroup]);
+    } catch (error) {
+      console.error('Payment failed:', error);
+    }
+  };
+
+  const handleMessageContact = (contact) => {
+    setSelectedContact(contact);
+    setIsMessagingModalOpen(true);
+  };
+
+  const handleSendMessage = (contact, message) => {
+    console.log(`Sending message to ${contact.displayName}: ${message}`);
+    // In a real implementation, this would send via Farcaster
   };
 
   const filteredContacts = contacts.filter(contact =>
@@ -91,6 +140,13 @@ function App() {
           hasPaidForPrioritization={hasPaidForPrioritization}
         />
 
+        {/* AI Insights Panel */}
+        <AIInsightsPanel 
+          contacts={contacts}
+          onApplyPrioritization={handleApplyAIPrioritization}
+          onCreateSuggestedGroup={handleCreateSuggestedGroup}
+        />
+
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Contact Groups Sidebar */}
           <div className="lg:col-span-1">
@@ -112,9 +168,18 @@ function App() {
               onPrioritizeContacts={handlePrioritizeContacts}
               hasPaidForPrioritization={hasPaidForPrioritization}
               selectedGroup={selectedGroup}
+              onMessageContact={handleMessageContact}
             />
           </div>
         </div>
+
+        {/* Messaging Modal */}
+        <MessagingModal 
+          contact={selectedContact}
+          isOpen={isMessagingModalOpen}
+          onClose={() => setIsMessagingModalOpen(false)}
+          onSendMessage={handleSendMessage}
+        />
       </main>
     </div>
   );

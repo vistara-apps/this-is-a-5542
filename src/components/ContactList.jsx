@@ -8,7 +8,8 @@ export function ContactList({
   onSearchChange, 
   onPrioritizeContacts, 
   hasPaidForPrioritization,
-  selectedGroup 
+  selectedGroup,
+  onMessageContact 
 }) {
   return (
     <div className="bg-surface rounded-lg shadow-card border border-gray-800">
@@ -67,6 +68,7 @@ export function ContactList({
               key={contact.contactId} 
               contact={contact} 
               isPrioritized={hasPaidForPrioritization}
+              onMessage={onMessageContact}
             />
           ))
         )}
